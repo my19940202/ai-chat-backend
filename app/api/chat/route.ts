@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { getD1, execute, genId } from '@/lib/d1'
 import { streamChatCompletion, chatCompletion } from '@/lib/ai/gateway-chat'
+import { corsHeaders, parseUserIdFromToken } from '@/lib/auth'
 
 // export const runtime = 'edge' // 推荐在 CF Workers / OpenNext 上使用 edge runtime
 
@@ -11,6 +12,10 @@ interface ChatRequest {
   userId?: string
 }
 
+export async function OPTIONS() {
+  return new Response(null, { status: 204, headers: corsHeaders() })
+}
+
 /**
  * POST /api/chat
  * Body: { conversationId?, messages[], model?, userId? }
@@ -19,7 +24,11 @@ interface ChatRequest {
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as ChatRequest
-    const { conversationId, messages, model, userId = 'demo-user' } = body
+    const authHeader = req.headers.get('Authorization')
+    const tokenUserId = authHeader?.startsWith('Bearer ')
+      ? parseUserIdFromToken(authHeader.slice(7))
+      : null
+    const { conversationId, messages, model, userId = tokenUserId ?? 'demo-user' } = body
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return new Response(JSON.stringify({ error: 'messages 不能为空' }), { status: 400 })
@@ -122,13 +131,14 @@ export async function POST(req: NextRequest) {
         'Cache-Control': 'no-cache, no-transform',
         'Connection': 'keep-alive',
         'X-Conversation-Id': convId,
+        ...corsHeaders(),
       },
     })
   } catch (err: any) {
     console.error('[api/chat] error', err)
     return new Response(JSON.stringify({ error: err.message || '服务器错误' }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...corsHeaders() },
     })
   }
 }

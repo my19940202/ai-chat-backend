@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: "https",
-        hostname: "*.r2.cloudflarestorage.com",
+        hostname: "chat.aizeten.me",
       },
     ],
   },
@@ -17,4 +17,3 @@ import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 // Remote bindings are stable in wrangler >= 4.36.0.
 // Enable per-binding by setting `"remote": true` in wrangler.jsonc.
 initOpenNextCloudflareForDev();
-

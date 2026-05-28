@@ -9,7 +9,8 @@
     {
       "binding": "DB",
       "database_name": "ai-chat",
-      "database_id": "454c26cb-07cc-47b0-82ec-daf3549f4f9b"
+      "database_id": "454c26cb-07cc-47b0-82ec-daf3549f4f9b",
+      "remote": true
     }
   ],
   "assets": {
