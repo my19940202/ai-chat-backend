@@ -22,7 +22,7 @@ interface Message {
 }
 
 const DEFAULT_MODEL = 'openai/gpt-4.1-mini'
-const USER_ID = 'demo-user' // 后续可替换为真实登录用户
+const USER_ID = 'demo-user'
 
 export default function AIChatPage() {
   const [conversations, setConversations] = useState<Conversation[]>([])
