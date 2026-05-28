@@ -1,36 +1,91 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ai-chat-backend
 
-## Getting Started
+基于 **OpenNext** + **Next.js 16** 构建的 AI 聊天应用，目标部署到 **Cloudflare Workers**，使用：
 
-First, run the development server:
+- **D1**：SQLite 数据库（会话、消息持久化）
+- **R2**：对象存储（未来支持文件/图片上传）
+- **AI Gateway** + Workers AI：LLM 统一调用、限流、日志、BYOK
+
+目录结构参考 `../ai-image-maker` 项目风格。
+
+## 快速开始
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
+pnpm dev          # 本地 Next.js（无真实 Cloudflare 绑定）
+pnpm cf:build     # 构建 OpenNext worker
+pnpm preview      # 本地预览（模拟 Workers 环境）
+pnpm deploy       # 部署到 Cloudflare
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Cloudflare 准备工作（必须）
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. **创建 D1 数据库**
+   ```bash
+   npx wrangler d1 create ai-chat
+   ```
+   把返回的 `database_id` 填入 [wrangler.jsonc](wrangler.jsonc) 的 `d1_databases[0].database_id`
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+2. **创建 R2 Bucket**（可选，文件上传用）
+   ```bash
+   npx wrangler r2 bucket create ai-chat-uploads
+   ```
+   更新 wrangler.jsonc 中的 bucket_name
 
-## Learn More
+3. **创建 AI Gateway**（推荐）
+   - Cloudflare Dashboard → AI → AI Gateway → 创建 Gateway（id 建议 `ai-chat`）
+   - 在 wrangler.jsonc 里设置 `vars.AI_GATEWAY_ID`
 
-To learn more about Next.js, take a look at the following resources:
+4. **配置模型 Key**
+   - 在 Cloudflare AI Gateway 中添加 Provider（OpenAI / Anthropic / Google）
+   - 或直接在 `vars.OPENAI_API_KEY` 填入密钥（仅测试用，生产建议用 Gateway 托管密钥）
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+5. **执行数据库迁移**
+   ```bash
+   npx wrangler d1 execute ai-chat --file=./migrations/001_init.sql --remote
+   ```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+6. **生成类型定义**
+   ```bash
+   pnpm cf-typegen
+   ```
 
-## Deploy on Vercel
+## 本地开发使用真实绑定
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+`next.config.ts` 已启用 `remoteBindings: true`，`pnpm dev` 时会尝试连接远程 D1/R2/AI。
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 主要目录
+
+```
+app/
+  api/
+    chat/                 # 核心流式聊天接口（保存到 D1）
+    conversations/        # 会话 CRUD
+    r2/[...key]/          # R2 文件代理
+  page.tsx                # 主聊天界面
+lib/
+  d1.js                   # D1 辅助函数
+  r2.js                   # R2 辅助函数
+  env.js                  # 环境变量统一读取
+  ai/gateway-chat.js      # AI Gateway + Workers AI 聊天封装（支持流式）
+migrations/               # D1 SQL 迁移文件
+components/chat/          # 聊天 UI 组件
+wrangler.jsonc            # Cloudflare 配置（D1/R2/AI 绑定）
+open-next.config.ts
+```
+
+## 后续扩展建议
+
+- 接入真实用户系统（D1 users 表 + JWT / NextAuth / Cloudflare Access）
+- 支持多模态（图片上传 → R2 → vision 模型）
+- 增加工具调用 / Function calling
+- 消息点赞、分享、导出
+- 速率限制 + 额度控制（D1 记录用量）
+
+## 部署命令
+
+```bash
+pnpm cf:build && opennextjs-cloudflare deploy
+```
+
+或使用 GitHub Actions + Wrangler 自动部署。

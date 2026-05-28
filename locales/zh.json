@@ -1,0 +1,8 @@
+{
+  "app.name": "AI Chat",
+  "app.tagline": "基于 Cloudflare Workers + D1 + AI Gateway",
+  "chat.new": "新建对话",
+  "chat.placeholder": "输入消息，按 Enter 发送...",
+  "chat.loading": "思考中...",
+  "settings.model": "模型"
+}

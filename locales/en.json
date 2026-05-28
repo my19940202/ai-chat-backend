@@ -1,0 +1,8 @@
+{
+  "app.name": "AI Chat",
+  "app.tagline": "Powered by Cloudflare Workers + D1 + AI Gateway",
+  "chat.new": "New Chat",
+  "chat.placeholder": "Type a message, press Enter to send...",
+  "chat.loading": "Thinking...",
+  "settings.model": "Model"
+}
