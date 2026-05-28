@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { getD1, execute, genId } from '@/lib/d1'
 import { streamChatCompletion, chatCompletion } from '@/lib/ai/gateway-chat'
 
-export const runtime = 'edge' // 推荐在 CF Workers / OpenNext 上使用 edge runtime
+// export const runtime = 'edge' // 推荐在 CF Workers / OpenNext 上使用 edge runtime
 
 interface ChatRequest {
   conversationId?: string
