@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
       await execute(
         `INSERT INTO conversations (id, user_id, title, model, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?)`,
-        [convId, userId, '新对话', model || 'gpt-4o-mini', now, now]
+        [convId, userId, '新对话', model || 'openai/gpt-4.1-mini', now, now]
       )
     }
 

@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const userId = body.userId || DEFAULT_USER
     const title = body.title || '新对话'
-    const model = body.model || 'gpt-4o-mini'
+    const model = body.model || 'openai/gpt-4.1-mini'
 
     const id = genId()
     const now = Date.now()

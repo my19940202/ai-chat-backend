@@ -2,10 +2,15 @@
 
 import { ChevronDown } from 'lucide-react'
 
+// 第三方模型走 AI Gateway Unified Billing（用 CF 充值的 credits 扣费）
+// Workers AI 模型（@cf/...）走 Workers AI 自家计费
 const MODELS = [
-  { value: 'gpt-4o-mini', label: 'GPT-4o mini (via AI Gateway)' },
+  { value: 'openai/gpt-4.1-mini', label: 'GPT-4.1 mini (OpenAI · Unified)' },
+  { value: 'openai/gpt-4.1', label: 'GPT-4.1 (OpenAI · Unified)' },
+  { value: 'anthropic/claude-3-5-sonnet-latest', label: 'Claude 3.5 Sonnet (Anthropic · Unified)' },
+  { value: 'google/gemini-2.0-flash', label: 'Gemini 2.0 Flash (Google · Unified)' },
   { value: '@cf/meta/llama-3.1-8b-instruct', label: 'Llama 3.1 8B (Workers AI)' },
-  { value: 'gpt-4o', label: 'GPT-4o (via AI Gateway)' },
+  { value: '@cf/moonshotai/kimi-k2.5', label: 'Kimi K2.5 (Workers AI)' },
 ]
 
 interface Props {

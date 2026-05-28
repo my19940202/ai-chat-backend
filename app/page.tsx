@@ -21,7 +21,7 @@ interface Message {
   created_at?: number
 }
 
-const DEFAULT_MODEL = 'gpt-4o-mini'
+const DEFAULT_MODEL = 'openai/gpt-4.1-mini'
 const USER_ID = 'demo-user' // 后续可替换为真实登录用户
 
 export default function AIChatPage() {
