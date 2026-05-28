@@ -14,7 +14,7 @@ const nextConfig: NextConfig = {
 export default nextConfig;
 
 import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
-initOpenNextCloudflareForDev({
-  experimental: { remoteBindings: true },
-});
+// Remote bindings are stable in wrangler >= 4.36.0.
+// Enable per-binding by setting `"remote": true` in wrangler.jsonc.
+initOpenNextCloudflareForDev();
 
