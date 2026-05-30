@@ -1,14 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getD1, queryAll, execute, genId } from '@/lib/d1'
+import { parseUserIdFromToken } from '@/lib/auth'
 
 const DEFAULT_USER = 'demo-user'
 
+function resolveUserId(req: NextRequest): string | null {
+  const fromQuery = req.nextUrl.searchParams.get('userId')
+  if (fromQuery) return fromQuery
+
+  const auth = req.headers.get('Authorization')
+  if (auth?.startsWith('Bearer ')) {
+    return parseUserIdFromToken(auth.slice(7))
+  }
+  return null
+}
+
 /**
  * GET /api/conversations?userId=xxx
+ * 也支持 Authorization: Bearer <token>
  * 返回当前用户的最近 50 条会话
  */
 export async function GET(req: NextRequest) {
-  const userId = req.nextUrl.searchParams.get('userId') || DEFAULT_USER
+  const userId = resolveUserId(req) || DEFAULT_USER
   try {
     const convos = await queryAll(
       `SELECT id, title, model, created_at, updated_at
@@ -31,7 +44,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const userId = body.userId || DEFAULT_USER
+    const userId = body.userId || resolveUserId(req) || DEFAULT_USER
     const title = body.title || '新对话'
     const model = body.model || 'openai/gpt-4.1-mini'
 
