@@ -1,7 +1,13 @@
 import { NextRequest } from 'next/server'
-import { getD1, execute, genId } from '@/lib/d1'
+import { getD1, execute, genId, queryOne } from '@/lib/d1'
 import { streamChatCompletion, chatCompletion } from '@/lib/ai/gateway-chat'
 import { corsHeaders, parseUserIdFromToken } from '@/lib/auth'
+import {
+  checkQuota,
+  ensureQuotaCountersFresh,
+  getQuotaTypeForModel,
+  recordUsage,
+} from '@/lib/quota'
 
 // export const runtime = 'edge' // 推荐在 CF Workers / OpenNext 上使用 edge runtime
 
@@ -21,12 +27,37 @@ export async function POST(req: NextRequest) {
       ? parseUserIdFromToken(authHeader.slice(7))
       : null
     const { conversationId, messages, model, userId = tokenUserId ?? 'demo-user' } = body
+    const effectiveModel = model || 'openai/gpt-4.1-mini'
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return new Response(JSON.stringify({ error: 'messages 不能为空' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
       })
+    }
+
+    const quotaType = getQuotaTypeForModel(effectiveModel)
+    let planTier = 'free'
+
+    if (userId && userId !== 'demo-user') {
+      const userRow = await queryOne(
+        `SELECT id, plan_tier, plan_status, daily_standard_used, monthly_standard_used,
+                monthly_premium_used, last_daily_reset_at, last_monthly_reset_at, credit
+         FROM users WHERE id = ?`,
+        [userId],
+      )
+
+      if (userRow) {
+        const freshUser = await ensureQuotaCountersFresh(userRow as Record<string, unknown>)
+        planTier = String(freshUser.plan_tier || 'free')
+        const quotaCheck = checkQuota(freshUser as Record<string, unknown>, quotaType)
+        if (!quotaCheck.allowed) {
+          return new Response(JSON.stringify({ error: quotaCheck.reason }), {
+            status: 429,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+          })
+        }
+      }
     }
 
     const db = await getD1()
@@ -39,7 +70,7 @@ export async function POST(req: NextRequest) {
       await execute(
         `INSERT INTO conversations (id, user_id, title, model, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?)`,
-        [convId, userId, '新对话', model || 'openai/gpt-4.1-mini', now, now]
+        [convId, userId, '新对话', effectiveModel, now, now]
       )
     }
 
@@ -56,7 +87,7 @@ export async function POST(req: NextRequest) {
 
     // 3. 启动流式生成
     const stream = await streamChatCompletion(messages, {
-      model,
+      model: effectiveModel,
       userId,
     })
 
@@ -98,6 +129,15 @@ export async function POST(req: NextRequest) {
             `UPDATE conversations SET updated_at = ? WHERE id = ?`,
             [Date.now(), convId]
           ).catch(console.error)
+
+          if (userId && userId !== 'demo-user') {
+            await recordUsage(
+              userId,
+              effectiveModel,
+              quotaType,
+              planTier as 'free' | 'pro' | 'max',
+            ).catch(console.error)
+          }
 
           // 自动生成标题（仅当标题还是“新对话”且有内容时）
           const conv = await db.prepare('SELECT title FROM conversations WHERE id = ?').bind(convId).first<{ title: string }>()

@@ -6,6 +6,7 @@ import {
   jsonResponse,
   parseUserIdFromToken,
 } from '@/lib/auth'
+import { buildQuotaSummary, ensureQuotaCountersFresh } from '@/lib/quota'
 
 interface UserRow {
   id: string
@@ -15,22 +16,53 @@ interface UserRow {
   password_hash: string | null
   created_at: number
   last_login_at: number | null
+  plan_tier?: string
+  plan_status?: string
+  daily_standard_used?: number
+  monthly_standard_used?: number
+  monthly_premium_used?: number
+  last_daily_reset_at?: number | null
+  last_monthly_reset_at?: number | null
+  credit?: number
 }
 
 interface UserActionBody {
-  action: 'register' | 'login'
+  action: 'register' | 'login' | 'updateProfile'
   email?: string
   password?: string
   name?: string
+  avatar_url?: string
 }
 
+const USER_SELECT_FIELDS = `
+  id, email, name, avatar_url, created_at, last_login_at,
+  plan_tier, plan_status, daily_standard_used, monthly_standard_used,
+  monthly_premium_used, last_daily_reset_at, last_monthly_reset_at, credit
+`
+
 function sanitizeUser(row: UserRow) {
+  const quota = buildQuotaSummary(row as unknown as Record<string, unknown>)
   return {
     id: row.id,
     email: row.email,
     name: row.name,
     avatar_url: row.avatar_url,
+    created_at: row.created_at,
+    last_login_at: row.last_login_at,
+    ...quota,
   }
+}
+
+async function getUserById(userId: string) {
+  const user = (await queryOne(
+    `SELECT ${USER_SELECT_FIELDS} FROM users WHERE id = ?`,
+    [userId],
+  )) as UserRow | null
+
+  if (!user) return null
+  return (await ensureQuotaCountersFresh(
+    user as unknown as Record<string, unknown>,
+  )) as unknown as UserRow
 }
 
 export async function GET(req: NextRequest) {
@@ -45,10 +77,7 @@ export async function GET(req: NextRequest) {
     return jsonResponse({ error: '未授权' }, 401, origin)
   }
 
-  const user = await queryOne(
-    'SELECT id, email, name, avatar_url, created_at, last_login_at FROM users WHERE id = ?',
-    [userId],
-  ) as UserRow | null
+  const user = await getUserById(userId)
 
   if (!user) {
     return jsonResponse({ error: '用户不存在' }, 404, origin)
@@ -61,7 +90,45 @@ export async function POST(req: NextRequest) {
   const origin = req.headers.get('origin')
   try {
     const body = (await req.json()) as UserActionBody
-    const { action, email, password, name } = body
+    const { action, email, password, name, avatar_url } = body
+
+    if (action === 'updateProfile') {
+      const authHeader = req.headers.get('Authorization')
+      const token = authHeader?.startsWith('Bearer ')
+        ? authHeader.slice(7)
+        : null
+      const userId = token ? parseUserIdFromToken(token) : null
+
+      if (!userId) {
+        return jsonResponse({ error: '未授权' }, 401, origin)
+      }
+
+      const updates: string[] = []
+      const params: unknown[] = []
+
+      if (name !== undefined) {
+        updates.push('name = ?')
+        params.push(name?.trim() || null)
+      }
+      if (avatar_url !== undefined) {
+        updates.push('avatar_url = ?')
+        params.push(avatar_url || null)
+      }
+
+      if (updates.length === 0) {
+        return jsonResponse({ error: '没有可更新的字段' }, 400, origin)
+      }
+
+      params.push(userId)
+      await execute(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, params)
+
+      const user = await getUserById(userId)
+      if (!user) {
+        return jsonResponse({ error: '用户不存在' }, 404, origin)
+      }
+
+      return jsonResponse({ user: sanitizeUser(user) }, 200, origin)
+    }
 
     if (!action || !email || !password) {
       return jsonResponse({ error: '缺少必要参数' }, 400, origin)
@@ -73,6 +140,17 @@ export async function POST(req: NextRequest) {
     }
 
     const passwordHash = await hashPassword(password)
+    const now = Date.now()
+    const dayStart = Date.UTC(
+      new Date(now).getUTCFullYear(),
+      new Date(now).getUTCMonth(),
+      new Date(now).getUTCDate(),
+    )
+    const monthStart = Date.UTC(
+      new Date(now).getUTCFullYear(),
+      new Date(now).getUTCMonth(),
+      1,
+    )
 
     if (action === 'register') {
       const existing = await queryOne(
@@ -85,12 +163,23 @@ export async function POST(req: NextRequest) {
       }
 
       const userId = genId()
-      const now = Date.now()
 
       await execute(
-        `INSERT INTO users (id, email, name, password_hash, created_at, last_login_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [userId, normalizedEmail, name?.trim() || null, passwordHash, now, now],
+        `INSERT INTO users (
+          id, email, name, password_hash, created_at, last_login_at,
+          plan_tier, plan_status, daily_standard_used, monthly_standard_used,
+          monthly_premium_used, last_daily_reset_at, last_monthly_reset_at, credit
+        ) VALUES (?, ?, ?, ?, ?, ?, 'free', 'active', 0, 0, 0, ?, ?, 0)`,
+        [
+          userId,
+          normalizedEmail,
+          name?.trim() || null,
+          passwordHash,
+          now,
+          now,
+          dayStart,
+          monthStart,
+        ],
       )
 
       const token = createToken(userId)
@@ -101,13 +190,29 @@ export async function POST(req: NextRequest) {
           email: normalizedEmail,
           name: name?.trim() || null,
           avatar_url: null,
+          created_at: now,
+          plan_tier: 'free',
+          plan_status: 'active',
+          daily_standard_used: 0,
+          monthly_standard_used: 0,
+          monthly_premium_used: 0,
+          credit: 0,
+          limits: {
+            daily_standard: 10,
+            monthly_standard: null,
+            monthly_premium: 0,
+            unlimited: false,
+          },
         },
       }, 200, origin)
     }
 
     if (action === 'login') {
       const user = await queryOne(
-        'SELECT id, email, name, avatar_url, password_hash FROM users WHERE email = ?',
+        `SELECT id, email, name, avatar_url, password_hash, created_at,
+                plan_tier, plan_status, daily_standard_used, monthly_standard_used,
+                monthly_premium_used, last_daily_reset_at, last_monthly_reset_at, credit
+         FROM users WHERE email = ?`,
         [normalizedEmail],
       ) as UserRow | null
 
@@ -115,11 +220,11 @@ export async function POST(req: NextRequest) {
         return jsonResponse({ error: '邮箱或密码错误' }, 401, origin)
       }
 
-      const now = Date.now()
       await execute('UPDATE users SET last_login_at = ? WHERE id = ?', [now, user.id])
 
+      const refreshed = await getUserById(user.id)
       const token = createToken(user.id)
-      return jsonResponse({ token, user: sanitizeUser(user) }, 200, origin)
+      return jsonResponse({ token, user: sanitizeUser(refreshed || user) }, 200, origin)
     }
 
     return jsonResponse({ error: '未知 action' }, 400, origin)
