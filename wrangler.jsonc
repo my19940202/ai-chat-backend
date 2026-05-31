@@ -53,6 +53,7 @@
     "AI_GATEWAY_ID": "ai-chat",
     "AI_GATEWAY_ACCOUNT_ID": "",
     "OPENAI_API_KEY": "",
-    "NEXT_PUBLIC_APP_NAME": "AI Chat"
+    "NEXT_PUBLIC_APP_NAME": "AI Chat",
+    "CORS_ALLOWED_ORIGINS": "https://ai.aizeten.me"
   }
 }

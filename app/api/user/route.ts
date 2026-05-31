@@ -1,7 +1,6 @@
 import { NextRequest } from 'next/server'
 import { execute, genId, queryOne } from '@/lib/d1'
 import {
-  corsHeaders,
   createToken,
   hashPassword,
   jsonResponse,
@@ -34,11 +33,8 @@ function sanitizeUser(row: UserRow) {
   }
 }
 
-export async function OPTIONS() {
-  return new Response(null, { status: 204, headers: corsHeaders() })
-}
-
 export async function GET(req: NextRequest) {
+  const origin = req.headers.get('origin')
   const authHeader = req.headers.get('Authorization')
   const token = authHeader?.startsWith('Bearer ')
     ? authHeader.slice(7)
@@ -46,7 +42,7 @@ export async function GET(req: NextRequest) {
   const userId = token ? parseUserIdFromToken(token) : null
 
   if (!userId) {
-    return jsonResponse({ error: '未授权' }, 401)
+    return jsonResponse({ error: '未授权' }, 401, origin)
   }
 
   const user = await queryOne(
@@ -55,24 +51,25 @@ export async function GET(req: NextRequest) {
   ) as UserRow | null
 
   if (!user) {
-    return jsonResponse({ error: '用户不存在' }, 404)
+    return jsonResponse({ error: '用户不存在' }, 404, origin)
   }
 
-  return jsonResponse({ user: sanitizeUser(user) })
+  return jsonResponse({ user: sanitizeUser(user) }, 200, origin)
 }
 
 export async function POST(req: NextRequest) {
+  const origin = req.headers.get('origin')
   try {
     const body = (await req.json()) as UserActionBody
     const { action, email, password, name } = body
 
     if (!action || !email || !password) {
-      return jsonResponse({ error: '缺少必要参数' }, 400)
+      return jsonResponse({ error: '缺少必要参数' }, 400, origin)
     }
 
     const normalizedEmail = email.trim().toLowerCase()
     if (!normalizedEmail || password.length < 6) {
-      return jsonResponse({ error: '邮箱无效或密码至少 6 位' }, 400)
+      return jsonResponse({ error: '邮箱无效或密码至少 6 位' }, 400, origin)
     }
 
     const passwordHash = await hashPassword(password)
@@ -84,7 +81,7 @@ export async function POST(req: NextRequest) {
       )
 
       if (existing) {
-        return jsonResponse({ error: '该邮箱已注册' }, 409)
+        return jsonResponse({ error: '该邮箱已注册' }, 409, origin)
       }
 
       const userId = genId()
@@ -105,7 +102,7 @@ export async function POST(req: NextRequest) {
           name: name?.trim() || null,
           avatar_url: null,
         },
-      })
+      }, 200, origin)
     }
 
     if (action === 'login') {
@@ -115,20 +112,20 @@ export async function POST(req: NextRequest) {
       ) as UserRow | null
 
       if (!user || !user.password_hash || user.password_hash !== passwordHash) {
-        return jsonResponse({ error: '邮箱或密码错误' }, 401)
+        return jsonResponse({ error: '邮箱或密码错误' }, 401, origin)
       }
 
       const now = Date.now()
       await execute('UPDATE users SET last_login_at = ? WHERE id = ?', [now, user.id])
 
       const token = createToken(user.id)
-      return jsonResponse({ token, user: sanitizeUser(user) })
+      return jsonResponse({ token, user: sanitizeUser(user) }, 200, origin)
     }
 
-    return jsonResponse({ error: '未知 action' }, 400)
+    return jsonResponse({ error: '未知 action' }, 400, origin)
   } catch (err: unknown) {
     console.error('[api/user] error', err)
     const message = err instanceof Error ? err.message : '服务器错误'
-    return jsonResponse({ error: message }, 500)
+    return jsonResponse({ error: message }, 500, origin)
   }
 }

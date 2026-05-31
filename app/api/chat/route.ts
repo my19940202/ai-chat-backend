@@ -12,16 +12,8 @@ interface ChatRequest {
   userId?: string
 }
 
-export async function OPTIONS() {
-  return new Response(null, { status: 204, headers: corsHeaders() })
-}
-
-/**
- * POST /api/chat
- * Body: { conversationId?, messages[], model?, userId? }
- * 返回 SSE 流（OpenAI 兼容格式）
- */
 export async function POST(req: NextRequest) {
+  const origin = req.headers.get('origin')
   try {
     const body = (await req.json()) as ChatRequest
     const authHeader = req.headers.get('Authorization')
@@ -31,7 +23,10 @@ export async function POST(req: NextRequest) {
     const { conversationId, messages, model, userId = tokenUserId ?? 'demo-user' } = body
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
-      return new Response(JSON.stringify({ error: 'messages 不能为空' }), { status: 400 })
+      return new Response(JSON.stringify({ error: 'messages 不能为空' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+      })
     }
 
     const db = await getD1()
@@ -131,14 +126,14 @@ export async function POST(req: NextRequest) {
         'Cache-Control': 'no-cache, no-transform',
         'Connection': 'keep-alive',
         'X-Conversation-Id': convId,
-        ...corsHeaders(),
+        ...corsHeaders(origin),
       },
     })
   } catch (err: any) {
     console.error('[api/chat] error', err)
     return new Response(JSON.stringify({ error: err.message || '服务器错误' }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders() },
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
     })
   }
 }
