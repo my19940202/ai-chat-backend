@@ -23,7 +23,7 @@ interface UserRow {
 }
 
 function sanitizeUser(row: UserRow) {
-  const quota = buildQuotaSummary(row as Record<string, unknown>)
+  const quota = buildQuotaSummary(row as unknown as Record<string, unknown>)
   return {
     id: row.id,
     email: row.email,
@@ -97,8 +97,8 @@ export async function POST(req: NextRequest) {
     }
 
     const refreshed = (await ensureQuotaCountersFresh(
-      user as Record<string, unknown>,
-    )) as UserRow
+      user as unknown as Record<string, unknown>,
+    )) as unknown as UserRow
 
     return jsonResponse(
       {
