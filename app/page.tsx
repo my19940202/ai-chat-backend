@@ -21,7 +21,7 @@ interface Message {
   created_at?: number
 }
 
-const DEFAULT_MODEL = 'openai/gpt-4.1-mini'
+const DEFAULT_MODEL = 'openai/gpt-5.4-mini'
 const USER_ID = 'demo-user'
 
 export default function AIChatPage() {

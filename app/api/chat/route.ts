@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
       ? parseUserIdFromToken(authHeader.slice(7))
       : null
     const { conversationId, messages, model, userId = tokenUserId ?? 'demo-user' } = body
-    const effectiveModel = model || 'openai/gpt-4.1-mini'
+    const effectiveModel = model || 'openai/gpt-5.4-mini'
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return new Response(JSON.stringify({ error: 'messages 不能为空' }), {
