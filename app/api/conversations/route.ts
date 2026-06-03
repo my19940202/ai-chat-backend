@@ -24,10 +24,12 @@ export async function GET(req: NextRequest) {
   const userId = resolveUserId(req) || DEFAULT_USER
   try {
     const convos = await queryAll(
-      `SELECT id, title, model, created_at, updated_at
-       FROM conversations
-       WHERE user_id = ?
-       ORDER BY updated_at DESC
+      `SELECT 
+        c.id, c.title, c.model, c.created_at, c.updated_at,
+        (SELECT content FROM messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message
+       FROM conversations c
+       WHERE c.user_id = ?
+       ORDER BY c.updated_at DESC
        LIMIT 50`,
       [userId]
     )
